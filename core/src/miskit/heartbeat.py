@@ -2,7 +2,7 @@ import json
 from collections import deque
 from pathlib import Path
 
-from miskit.transcript import log_message_data
+from miskit.message import log_message_to_dict
 
 
 HEARTBEAT_JOB_ID = "heartbeat"
@@ -115,7 +115,7 @@ class HeartbeatLog:
         entry = {
             "timestamp": timestamp,
             "quiet": quiet,
-            "messages": [log_message_data(message) for message in messages],
+            "messages": [log_message_to_dict(message) for message in messages],
         }
         with self.path.open("a", encoding="utf-8") as file:
             file.write(json.dumps(entry) + "\n")

@@ -1,12 +1,11 @@
 import asyncio
 from datetime import datetime
 
-from miskit.conversation import Conversation
 from miskit.message import Message
+from miskit.message import format_message
 from miskit.tool_runner import DEFAULT_MAX_TOOL_OUTPUT_CHARS
 from miskit.tool_runner import ToolRunner
 
-# Default cap on how many times the model may answer with tool calls in one user turn (each time: run tools, then ask again).
 DEFAULT_MAX_TOOL_ROUNDS = 20
 _CONTEXT_USAGE_LIMIT = 0.8
 
@@ -18,6 +17,17 @@ def runtime_metadata():
     timezone = now.tzname() or "local time"
     current_time = f"{now.strftime('%Y-%m-%d %H:%M (%A)')} {timezone}, UTC{offset}"
     return f"[Runtime Metadata]\nCurrent Time: {current_time}\n[/Runtime Metadata]"
+
+
+class Conversation:
+    def __init__(self):
+        self.messages = []
+
+    def add(self, message):
+        if not isinstance(message, Message):
+            raise TypeError("message must be a Message")
+        self.messages.append(message)
+        return message
 
 
 class Runner:
@@ -66,7 +76,6 @@ class Runner:
         messages = self._messages_for_model(messages)
         turn_start = len(self.conversation.messages) - 1 if log_tools else 0
 
-        # Pre-flight: check context size before the first model call.
         if log_tools and self._context_nearly_full(messages):
             if self.compactor is not None and self.history is not None:
                 await self._compact_for_overflow(turn_start)
@@ -78,7 +87,6 @@ class Runner:
                     "Please start a new conversation to continue.",
                 )
 
-        # A model may chain several tool rounds before answering.
         for _ in range(self.max_tool_rounds):
             message = await self.complete(messages)
 
@@ -280,7 +288,7 @@ class Runner:
     def _save_transcript(self, messages):
         if self.truncation_store is None:
             return None
-        transcript = "\n\n".join(self.compactor.format_message(message) for message in messages)
+        transcript = "\n\n".join(format_message(message) for message in messages)
         return self.truncation_store.save(transcript)
 
     def _replace_history(self, messages):

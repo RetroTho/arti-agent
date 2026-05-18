@@ -1,7 +1,7 @@
 import json
 
 from miskit.message import Message
-from miskit.transcript import format_message as format_transcript_message
+from miskit.message import format_message
 
 _COMPACT_TOOL_OUTPUT_CHARS = 200
 
@@ -118,7 +118,7 @@ class Compactor:
         current = []
         current_chars = 0
         for message in messages:
-            text = format_transcript_message(message)
+            text = format_message(message)
             if current and message.role == "user" and current_chars + len(text) > max_chars:
                 chunks.append(current)
                 current = []
@@ -142,7 +142,7 @@ class Compactor:
             parts.append(f"Summary so far:\n\n{prior_summary}")
         texts = []
         for message in messages:
-            text = format_transcript_message(message)
+            text = format_message(message)
             if len(text) > max_chars:
                 text = text[:max_chars] + "\n[message truncated for summary]"
             texts.append(text)
@@ -163,5 +163,3 @@ class Compactor:
             )
         return Message("system", content)
 
-    def format_message(self, message):
-        return format_transcript_message(message)

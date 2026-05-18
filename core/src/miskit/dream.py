@@ -3,9 +3,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from miskit.message import Message
+from miskit.message import format_message
+from miskit.message import message_from_dict
 from miskit.runner import Runner
-from miskit.transcript import format_message as format_transcript_message
-from miskit.transcript import message_from_data
 from miskit.tools.memory import MemoryTool
 
 
@@ -95,7 +95,7 @@ class Dream:
         current = []
         current_chars = 0
         for message in messages:
-            text = format_transcript_message(message)
+            text = format_message(message)
             if current and message.role == "user" and current_chars + len(text) > max_chars:
                 chunks.append(current)
                 current = []
@@ -112,7 +112,7 @@ class Dream:
         max_chars = self.max_chunk_chars
         texts = []
         for m in messages:
-            text = format_transcript_message(m)
+            text = format_message(m)
             if len(text) > max_chars:
                 text = text[:max_chars] + "\n[message truncated for summary]"
             texts.append(text)
@@ -131,12 +131,9 @@ class Dream:
 
         for line in Path(path).read_text(encoding="utf-8").splitlines():
             if line:
-                messages.append(message_from_data(json.loads(line)))
+                messages.append(message_from_dict(json.loads(line)))
 
         return messages
-
-    def format_message(self, message):
-        return format_transcript_message(message)
 
     def load_state(self):
         if not self.state_path.exists():

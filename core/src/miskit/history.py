@@ -2,8 +2,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from miskit.transcript import message_data
-from miskit.transcript import message_from_data
+from miskit.message import message_to_dict
+from miskit.message import message_from_dict
 
 
 class History:
@@ -33,7 +33,7 @@ class History:
 
         for line in self.path().read_text(encoding="utf-8").splitlines():
             if line:
-                messages.append(message_from_data(json.loads(line)))
+                messages.append(message_from_dict(json.loads(line)))
 
         return messages
 
@@ -56,4 +56,4 @@ class History:
                 self.write_message(file, message)
 
     def write_message(self, file, message):
-        file.write(json.dumps(message_data(message)) + "\n")
+        file.write(json.dumps(message_to_dict(message)) + "\n")

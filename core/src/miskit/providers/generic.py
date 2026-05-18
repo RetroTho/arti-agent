@@ -9,7 +9,7 @@ from urllib.request import urlopen
 
 from miskit.message import Message
 from miskit.message import ToolCall
-from miskit.model import Model
+from miskit.provider import Model
 from miskit.provider import Provider
 
 

@@ -8,14 +8,14 @@ from miskit.config import Config
 from miskit.cron import CronLog
 from miskit.cron import CronService
 from miskit.dream import Dream
+from miskit.heartbeat import HEARTBEAT_JOB_ID, HEARTBEAT_QUIET_REPLY, HeartbeatLog, HeartbeatTasks
 from miskit.history import History
 from miskit.image import ImageStore
 from miskit.memory import Memory
 from miskit.message import Message
-from miskit.model import Model
+from miskit.provider import Model
 from miskit.runner import Runner
 from miskit.runner import DEFAULT_MAX_TOOL_ROUNDS
-from miskit.heartbeat import HEARTBEAT_JOB_ID, HEARTBEAT_QUIET_REPLY, HeartbeatLog, HeartbeatTasks
 from miskit.tool import Tool
 from miskit.truncation import TruncationStore
 

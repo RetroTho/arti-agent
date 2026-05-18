@@ -6,7 +6,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from miskit.message import Message, ToolCall
-from miskit.model import Model
+from miskit.provider import Model
 from miskit_codex.auth import get_codex_token
 
 

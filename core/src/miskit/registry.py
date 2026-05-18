@@ -7,7 +7,7 @@ def load_module(name, *, group, builtins_prefix, kind, allow_direct=False):
     if not name:
         raise ValueError(f"{kind}.name is required")
 
-    entry_point = _entry_point(group, name)
+    entry_point = _find_entry_point(group, name)
     if entry_point is not None:
         return entry_point.load()
 
@@ -19,16 +19,10 @@ def load_module(name, *, group, builtins_prefix, kind, allow_direct=False):
     raise ValueError(f"unknown {kind}: {name}")
 
 
-def require_attribute(target, attribute, *, kind, name):
-    if not hasattr(target, attribute):
-        raise ValueError(f"{kind} must define {attribute}: {name}")
-    return target
-
-
-def _entry_point(group, name):
-    for entry_point in entry_points(group=group):
-        if entry_point.name == name:
-            return entry_point
+def _find_entry_point(group, name):
+    for ep in entry_points(group=group):
+        if ep.name == name:
+            return ep
     return None
 
 

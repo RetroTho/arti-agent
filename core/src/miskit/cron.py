@@ -7,7 +7,7 @@ from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
 
-from miskit.transcript import log_message_data
+from miskit.message import log_message_to_dict
 
 
 @dataclass
@@ -244,7 +244,7 @@ class CronLog:
             "timestamp": timestamp,
             "job_id": job_id,
             "job_name": job_name,
-            "messages": [log_message_data(message) for message in messages],
+            "messages": [log_message_to_dict(message) for message in messages],
         }
         with self.path.open("a", encoding="utf-8") as file:
             file.write(json.dumps(entry) + "\n")

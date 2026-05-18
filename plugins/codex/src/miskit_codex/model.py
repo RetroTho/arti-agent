@@ -30,8 +30,8 @@ class CodexModel(Model):
         )
 
     async def complete(self, messages, tools=None):
-        content, tool_calls = await asyncio.to_thread(self._send, messages, tools)
-        return Message("assistant", content, tool_calls=tool_calls)
+        content, tool_calls, usage = await asyncio.to_thread(self._send, messages, tools)
+        return Message("assistant", content, tool_calls=tool_calls, usage=usage)
 
     def _send(self, messages, tools=None):
         request = Request(
@@ -163,6 +163,7 @@ class CodexModel(Model):
 def _parse_sse(text):
     content = ""
     tool_calls = []
+    usage = {}
     buffers = {}
 
     for event in _sse_events(text):
@@ -189,10 +190,27 @@ def _parse_sse(text):
             tool_call = _tool_call_from_event(event, buffers)
             if tool_call is not None:
                 tool_calls.append(tool_call)
+        elif event_type == "response.completed":
+            usage = _parse_usage(event)
         elif event_type in ("error", "response.failed"):
             raise RuntimeError(f"Response failed: {event}")
 
-    return content, tool_calls
+    return content, tool_calls, usage
+
+
+def _parse_usage(event):
+    response = event.get("response") or {}
+    raw = response.get("usage") or {}
+    if not isinstance(raw, dict):
+        return {}
+    result = {}
+    for key in ("input_tokens", "output_tokens", "total_tokens"):
+        value = raw.get(key)
+        if isinstance(value, int):
+            result[key] = value
+    if result.get("input_tokens") is not None:
+        result["prompt_tokens"] = result["input_tokens"]
+    return result
 
 
 def _sse_events(text):

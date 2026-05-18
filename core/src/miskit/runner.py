@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime
 
+from miskit.compaction import estimate_messages_tokens
 from miskit.message import Message
 from miskit.message import format_message
 from miskit.tool_runner import DEFAULT_MAX_TOOL_OUTPUT_CHARS
@@ -121,6 +122,8 @@ class Runner:
         for _ in range(self.max_tool_rounds):
             message = await self.complete(messages)
             prompt_tokens = message.usage.get("prompt_tokens")
+            if isinstance(prompt_tokens, int) and prompt_tokens > 0:
+                self._last_prompt_tokens = prompt_tokens
 
             if message.role != "assistant":
                 raise ValueError("model must return an assistant message")
@@ -175,11 +178,10 @@ class Runner:
     async def compact_if_needed(self):
         if self.compactor is None or self.history is None:
             return False
-        if self._last_prompt_tokens is None:
-            return False
 
         message_count = len(self.conversation.messages)
-        if not self.compactor.should_compact(self._last_prompt_tokens, message_count):
+        prompt_tokens = self._prompt_tokens()
+        if not self.compactor.should_compact(prompt_tokens, message_count):
             return False
 
         old_messages, recent_messages = self.compactor.split(self.conversation.messages)
@@ -252,10 +254,18 @@ class Runner:
             return False
         return len(message.text) > self.max_input_chars
 
+    def _prompt_tokens(self, prompt_tokens=None):
+        if isinstance(prompt_tokens, int) and prompt_tokens > 0:
+            return prompt_tokens
+        if isinstance(self._last_prompt_tokens, int) and self._last_prompt_tokens > 0:
+            return self._last_prompt_tokens
+        return estimate_messages_tokens(self.conversation.messages)
+
     def _context_nearly_full(self, prompt_tokens):
-        if self.compactor is None or prompt_tokens is None:
+        if self.compactor is None:
             return False
-        return prompt_tokens >= self.compactor.context_tokens * _CONTEXT_USAGE_LIMIT
+        tokens = self._prompt_tokens(prompt_tokens)
+        return tokens >= self.compactor.context_tokens * _CONTEXT_USAGE_LIMIT
 
     def _messages_with_active_user_message(self, stored_message, active_message):
         messages = list(self.conversation.messages)

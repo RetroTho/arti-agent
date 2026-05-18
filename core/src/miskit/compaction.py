@@ -2,6 +2,26 @@ from miskit.message import Message
 from miskit.message import format_message
 
 _COMPACT_TOOL_OUTPUT_CHARS = 200
+_BYTES_PER_TOKEN = 4
+
+
+def estimate_tokens(text):
+    if not text:
+        return 0
+    length = len(text.encode("utf-8")) if isinstance(text, str) else len(text)
+    return (length + _BYTES_PER_TOKEN - 1) // _BYTES_PER_TOKEN
+
+
+def estimate_message_tokens(message):
+    text = format_message(message)
+    return estimate_tokens(text)
+
+
+def estimate_messages_tokens(messages):
+    total = 0
+    for message in messages:
+        total += estimate_message_tokens(message)
+    return total
 
 
 class Compactor:

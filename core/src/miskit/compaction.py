@@ -1,7 +1,7 @@
 from miskit.message import Message
 from miskit.message import format_message
 
-_COMPACT_TOOL_OUTPUT_CHARS = 200
+_COMPACT_TOOL_OUTPUT_CHARS = 1000
 _BYTES_PER_TOKEN = 4
 
 
@@ -136,7 +136,8 @@ class Compactor:
         content = (
             "# Previous Conversation Summary\n\n"
             "This is a compact summary of an archived conversation. Use it as background context, "
-            "but prefer newer messages when details conflict.\n\n"
+            "but prefer newer messages when details conflict. "
+            "Use recall(action=\"search\") when exact older details matter.\n\n"
             f"{summary}"
         )
         if store_id is not None:

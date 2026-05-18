@@ -44,6 +44,15 @@ def max_tool_rounds_from_config(context):
     return value
 
 
+def tool_configs_with_memory(configs):
+    result = list(configs)
+    names = {config.get("name") for config in result}
+    for name in ("memory", "recall"):
+        if name not in names:
+            result.append({"name": name})
+    return result
+
+
 def build_runner(config, instance, services=None):
     instance = Path(instance).expanduser()
     memory = Memory(instance / "memory")
@@ -65,6 +74,7 @@ def build_runner(config, instance, services=None):
 
     services = dict(services or {})
     services.setdefault("memory", memory)
+    services.setdefault("history", history)
     services.setdefault("image_store", image_store)
     services.setdefault("context_tokens", context_config.get("tokens", 8000))
     services.setdefault("heartbeat_path", heartbeat_path(instance))
@@ -83,7 +93,8 @@ def build_runner(config, instance, services=None):
 
     model = Model.load(provider_config)
     compactor = Compactor.from_config(context_config)
-    tools = Tool.load_all(config.entries("tools"), services=services)
+    tool_configs = tool_configs_with_memory(config.entries("tools"))
+    tools = Tool.load_all(tool_configs, services=services)
     dream = Dream(
         model,
         memory,

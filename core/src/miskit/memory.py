@@ -1,7 +1,7 @@
 from pathlib import Path
 
-_MAX_ENTRIES_PER_CATEGORY = 50
 _MAX_ENTRY_LENGTH = 500
+_MAX_PROMPT_ENTRIES_PER_CATEGORY = 20
 
 
 class Memory:
@@ -9,6 +9,8 @@ class Memory:
 
 You are Miskit, a small and helpful AI assistant.
 Use the memory below when it is relevant to the conversation.
+When the user tells you something durable or asks you to remember it, save it with the memory tool.
+When a question depends on older details, search memory and recall before answering.
 Do not mention the memory unless it helps answer the user."""
 
     files = {
@@ -48,11 +50,34 @@ Do not mention the memory unless it helps answer the user."""
         return "\n\n".join(parts)
 
     def system_prompt(self):
-        memory_text = self.read()
+        memory_text = self.prompt_text()
         if not memory_text:
             return self.identity
 
         return f"{self.identity}\n\n# Memory\n\n{memory_text}"
+
+    def prompt_text(self):
+        parts = []
+        skipped = 0
+
+        for category in self.files:
+            entries = self.entries(category)
+            if not entries:
+                continue
+
+            title = self.titles[category]
+            parts.append(f"# {title}")
+            for entry in entries[:_MAX_PROMPT_ENTRIES_PER_CATEGORY]:
+                parts.append(f"- {entry['text']}")
+            skipped += max(0, len(entries) - _MAX_PROMPT_ENTRIES_PER_CATEGORY)
+
+        if skipped:
+            parts.append(
+                f"\n[{skipped} more memories are saved. "
+                "Use memory(action=\"search\") or memory(action=\"list\") when needed.]"
+            )
+
+        return "\n".join(parts)
 
     def add(self, category, text):
         self._check_category(category)
@@ -61,12 +86,6 @@ Do not mention the memory unless it helps answer the user."""
             raise ValueError(
                 f"memory entry is too long ({len(text)} characters). "
                 f"Entries must be {_MAX_ENTRY_LENGTH} characters or fewer."
-            )
-
-        if len(self.entries(category)) >= _MAX_ENTRIES_PER_CATEGORY:
-            raise ValueError(
-                f"{category} memory is full ({_MAX_ENTRIES_PER_CATEGORY} entries). "
-                "Remove or update an existing entry before adding a new one."
             )
 
         self.setup()
@@ -98,6 +117,28 @@ Do not mention the memory unless it helps answer the user."""
                 })
 
         return entries
+
+    def search(self, query, limit=10):
+        text = str(query or "").strip().lower()
+        if not text:
+            return []
+
+        terms = [part for part in text.split() if part]
+        results = []
+        for entry in self.entries():
+            haystack = entry["text"].lower()
+            if text in haystack:
+                score = 10
+            else:
+                score = sum(1 for term in terms if term in haystack)
+
+            if score:
+                item = dict(entry)
+                item["score"] = score
+                results.append(item)
+
+        results.sort(key=lambda item: item["score"], reverse=True)
+        return results[:limit]
 
     def update(self, memory_id, text):
         text = str(text).strip()

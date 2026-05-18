@@ -15,6 +15,8 @@ from miskit.message import Message
 from miskit.message import ToolCall
 from miskit.provider import Model
 from miskit.provider import Provider
+from miskit.recall import RecallHit
+from miskit.recall import RecallStore
 from miskit.runner import Conversation
 from miskit.runner import Runner
 from miskit.tool import Tool
@@ -26,6 +28,7 @@ from miskit.tools.heartbeat import HeartbeatTool
 from miskit.tools.edit_file import EditFileTool
 from miskit.tools.list_files import ListFilesTool
 from miskit.tools.memory import MemoryTool
+from miskit.tools.recall import RecallTool
 from miskit.tools.read_file import ReadFileTool
 from miskit.tools.read_more import ReadMoreTool
 from miskit.tools.write_file import WriteFileTool

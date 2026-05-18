@@ -48,6 +48,12 @@ class Config:
                 "name": "list_files",
             },
             {
+                "name": "memory",
+            },
+            {
+                "name": "recall",
+            },
+            {
                 "name": "cron",
             },
             {

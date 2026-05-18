@@ -204,8 +204,12 @@ class Runner:
             self._dream_requested = False
             try:
                 await self.dream.run_once()
-            except Exception:
-                pass
+            except Exception as error:
+                if hasattr(self.dream, "record_error"):
+                    try:
+                        self.dream.record_error(error)
+                    except Exception:
+                        pass
 
     async def summarize(self, messages):
         summary = ""
@@ -265,7 +269,7 @@ class Runner:
         if isinstance(self._last_prompt_tokens, int) and self._last_prompt_tokens > 0:
             new_messages = self.conversation.messages[self._last_prompt_tokens_at:]
             return self._last_prompt_tokens + estimate_messages_tokens(new_messages)
-        return estimate_messages_tokens(self.conversation.messages)
+        return estimate_messages_tokens(self._messages_for_model(self.conversation.messages))
 
     def _context_nearly_full(self, prompt_tokens):
         if self.compactor is None:

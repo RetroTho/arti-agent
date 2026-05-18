@@ -3,19 +3,23 @@ from miskit.tool import Tool
 
 class MemoryTool(Tool):
     name = "memory"
-    description = "Add, list, update, and remove long-term memories in Miskit's markdown memory files."
+    description = "Add, search, list, update, and remove long-term memories in Miskit's markdown memory files."
     input_schema = {
         "type": "object",
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["add", "list", "update", "remove"],
-                "description": "Use add to save a memory, list to show memories, update to edit one, or remove to delete one.",
+                "enum": ["add", "search", "list", "update", "remove"],
+                "description": "Use add to save a memory, search to find saved memories, list to show memories, update to edit one, or remove to delete one.",
             },
             "category": {
                 "type": "string",
                 "enum": ["user", "bot", "notes"],
                 "description": "Use user for user facts/preferences, bot for Miskit facts, notes for project notes.",
+            },
+            "query": {
+                "type": "string",
+                "description": "Search text for saved memories.",
             },
             "text": {
                 "type": "string",
@@ -24,6 +28,10 @@ class MemoryTool(Tool):
             "memory_id": {
                 "type": "string",
                 "description": "Memory id from the list action, like user:1.",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Maximum number of memories to return for list or search.",
             },
         },
         "required": ["action"],
@@ -37,6 +45,8 @@ class MemoryTool(Tool):
         action = str(arguments.get("action", "add")).strip() or "add"
         if action == "add":
             return self._add(arguments)
+        if action == "search":
+            return self._search(arguments)
         if action == "list":
             return self._list(arguments)
         if action == "update":
@@ -44,7 +54,7 @@ class MemoryTool(Tool):
         if action == "remove":
             return self._remove(arguments)
 
-        return "Unknown memory action. Use add, list, update, or remove."
+        return "Unknown memory action. Use add, search, list, update, or remove."
 
     def _add(self, arguments):
         category = str(arguments.get("category", "")).strip()
@@ -65,12 +75,15 @@ class MemoryTool(Tool):
 
     def _list(self, arguments):
         category = str(arguments.get("category", "")).strip() or None
+        limit = self._limit(arguments.get("limit"), default=50, maximum=200)
 
         try:
             entries = self.memory.entries(category)
         except ValueError as error:
             return f"Error: {error}"
 
+        total = len(entries)
+        entries = entries[:limit]
         if not entries:
             if category is None:
                 return "No memories."
@@ -78,6 +91,24 @@ class MemoryTool(Tool):
 
         lines = ["Memories:"]
         for entry in entries:
+            lines.append(f"- {entry['id']} [{entry['category']}] {entry['text']}")
+        if total > limit:
+            lines.append(f"\n[{total - limit} more memories not shown]")
+        return "\n".join(lines)
+
+    def _search(self, arguments):
+        query = str(arguments.get("query", "")).strip()
+        limit = self._limit(arguments.get("limit"), default=10, maximum=50)
+
+        if not query:
+            return "Error: memory search requires query."
+
+        results = self.memory.search(query, limit=limit)
+        if not results:
+            return "No matching memories."
+
+        lines = ["Matching memories:"]
+        for entry in results:
             lines.append(f"- {entry['id']} [{entry['category']}] {entry['text']}")
         return "\n".join(lines)
 
@@ -108,6 +139,16 @@ class MemoryTool(Tool):
             return f"Error: {error}"
 
         return f"Removed memory {memory_id}."
+
+    def _limit(self, value, default=10, maximum=50):
+        try:
+            limit = int(value)
+        except (TypeError, ValueError):
+            limit = default
+
+        if limit < 1:
+            limit = default
+        return min(limit, maximum)
 
 
 def create_tool(config, services=None):

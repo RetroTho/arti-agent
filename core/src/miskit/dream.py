@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from miskit.message import Message
@@ -57,7 +58,7 @@ class Dream:
         memory_tool = MemoryTool(self.memory)
         runner = Runner(self.model, tools=[memory_tool])
         archive_messages = self.read_archive(path)
-        overhead_chars = len(self.system_prompt()) + len(self.memory.read())
+        overhead_chars = len(self.system_prompt()) + len(self.memory.prompt_text())
         chunk_chars = max(1, self.max_chunk_chars - overhead_chars)
         chunks = self._chunk_messages(archive_messages, max_chars=chunk_chars)
         for index, chunk in enumerate(chunks):
@@ -108,7 +109,7 @@ class Dream:
         return chunks or [[]]
 
     def _archive_prompt(self, path, messages, part, total):
-        current_memory = self.memory.read().strip() or "(empty)"
+        current_memory = self.memory.prompt_text().strip() or "(empty)"
         max_chars = self.max_chunk_chars
         texts = []
         for m in messages:
@@ -155,3 +156,11 @@ class Dream:
     def save_state(self, state):
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+
+    def record_error(self, error):
+        state = self.load_state()
+        state["lastError"] = {
+            "time": datetime.now().astimezone().isoformat(),
+            "message": str(error),
+        }
+        self.save_state(state)

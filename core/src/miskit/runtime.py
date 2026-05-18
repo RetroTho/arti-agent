@@ -99,6 +99,7 @@ def build_runner(config, instance, services=None):
         compactor=compactor,
         dream=dream,
         max_tool_rounds=max_tool_rounds_from_config(context_config),
+        max_input_chars=context_config.get("maxInputChars", 20000),
         truncation_store=truncation_store,
     )
 

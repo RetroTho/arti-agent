@@ -7,6 +7,7 @@ from miskit.tool_runner import DEFAULT_MAX_TOOL_OUTPUT_CHARS
 from miskit.tool_runner import ToolRunner
 
 DEFAULT_MAX_TOOL_ROUNDS = 20
+DEFAULT_MAX_INPUT_CHARS = 20_000
 _CONTEXT_USAGE_LIMIT = 0.8
 
 
@@ -41,6 +42,7 @@ class Runner:
         compactor=None,
         dream=None,
         max_tool_rounds=DEFAULT_MAX_TOOL_ROUNDS,
+        max_input_chars=DEFAULT_MAX_INPUT_CHARS,
         truncation_store=None,
         max_tool_output_chars=DEFAULT_MAX_TOOL_OUTPUT_CHARS,
     ):
@@ -51,6 +53,7 @@ class Runner:
         self.compactor = compactor
         self.dream = dream
         self.max_tool_rounds = max_tool_rounds
+        self.max_input_chars = max_input_chars
         self.truncation_store = truncation_store
         self.max_tool_output_chars = max_tool_output_chars
         self.tool_runner = ToolRunner(
@@ -72,15 +75,43 @@ class Runner:
         self._logged_count = len(self.conversation.messages)
         self._chat_lock = asyncio.Lock()
 
+    async def chat(self, content):
+        async with self._chat_lock:
+            user_message = self._user_message(content)
+
+            if self._message_too_long(user_message):
+                return Message(
+                    "assistant",
+                    f"Your message is too long ({len(user_message.text):,} characters). "
+                    f"The maximum is {self.max_input_chars:,} characters.",
+                )
+
+            stored_message = user_message.storage_message()
+            self.conversation.add(stored_message)
+            archived = await self.compact_if_needed()
+            snapshot = len(self.conversation.messages)
+            messages = self._messages_with_active_user_message(stored_message, user_message)
+            try:
+                message = await self.run_turn(messages, log_tools=True)
+            except Exception:
+                self.rollback_conversation(snapshot)
+                raise
+            self._last_prompt_tokens = message.usage.get("prompt_tokens")
+            self.conversation.add(message)
+            self.log_conversation()
+            if archived:
+                self.request_dream()
+            return message
+
     async def run_turn(self, messages, log_tools=False):
         messages = self._messages_for_model(messages)
         turn_start = len(self.conversation.messages) - 1 if log_tools else 0
 
-        if log_tools and self._context_nearly_full(messages):
+        if log_tools and self._context_nearly_full(self._last_prompt_tokens):
             if self.compactor is not None and self.history is not None:
                 await self._compact_for_overflow(turn_start)
                 messages = self._messages_for_model(list(self.conversation.messages))
-            if self._context_nearly_full(messages):
+            else:
                 return Message(
                     "assistant",
                     "I need to stop here because the conversation context is nearly full. "
@@ -89,6 +120,7 @@ class Runner:
 
         for _ in range(self.max_tool_rounds):
             message = await self.complete(messages)
+            prompt_tokens = message.usage.get("prompt_tokens")
 
             if message.role != "assistant":
                 raise ValueError("model must return an assistant message")
@@ -106,7 +138,7 @@ class Runner:
                 if log_tools:
                     self.conversation.add(tool_result)
 
-            if log_tools and self._context_nearly_full(messages):
+            if log_tools and self._context_nearly_full(prompt_tokens):
                 if self.compactor is not None and self.history is not None:
                     await self._compact_for_overflow(turn_start)
                     messages = self._messages_for_model(list(self.conversation.messages))
@@ -140,56 +172,21 @@ class Runner:
         messages.append(Message("user", metadata))
         return messages
 
-    async def chat(self, content):
-        async with self._chat_lock:
-            user_message = self._user_message(content)
-            stored_message = user_message.storage_message()
-            self.conversation.add(stored_message)
-            archived = await self.compact_if_needed()
-            snapshot = len(self.conversation.messages)
-            messages = self._messages_with_active_user_message(stored_message, user_message)
-            try:
-                message = await self.run_turn(messages, log_tools=True)
-            except Exception:
-                self.rollback_conversation(snapshot)
-                raise
-            self._last_prompt_tokens = message.usage.get("prompt_tokens")
-            self.conversation.add(message)
-            self.log_conversation()
-            if archived:
-                self.request_dream()
-            return message
-
-    def _messages_for_compaction_check(self, messages=None):
-        if messages is None:
-            messages = list(self.conversation.messages)
-        else:
-            messages = list(messages)
-        if self.memory is not None:
-            system_prompt = self.memory.system_prompt()
-            if system_prompt:
-                messages = [Message("system", system_prompt)] + messages
-        return messages
-
     async def compact_if_needed(self):
         if self.compactor is None or self.history is None:
             return False
+        if self._last_prompt_tokens is None:
+            return False
 
-        messages = self._messages_for_compaction_check()
-        if not self.compactor.should_compact(messages, self._last_prompt_tokens):
+        message_count = len(self.conversation.messages)
+        if not self.compactor.should_compact(self._last_prompt_tokens, message_count):
             return False
 
         old_messages, recent_messages = self.compactor.split(self.conversation.messages)
         if not old_messages:
             return False
 
-        await self._replace_with_compacted_history(
-            old_messages,
-            recent_messages,
-            still_too_large=lambda messages: self.compactor.should_compact(
-                self._messages_for_compaction_check(messages),
-            ),
-        )
+        await self._replace_with_compacted_history(old_messages, recent_messages)
         return True
 
     def request_dream(self):
@@ -240,12 +237,25 @@ class Runner:
 
         return await self.model.complete(messages, self.tools)
 
+    def run_tool(self, tool_call):
+        return self.tool_runner.run(tool_call)
+
     def _user_message(self, content):
         if isinstance(content, Message):
             if content.role != "user":
                 raise ValueError("chat messages must have role='user'")
             return content
         return Message("user", content)
+
+    def _message_too_long(self, message):
+        if self.max_input_chars is None or self.max_input_chars <= 0:
+            return False
+        return len(message.text) > self.max_input_chars
+
+    def _context_nearly_full(self, prompt_tokens):
+        if self.compactor is None or prompt_tokens is None:
+            return False
+        return prompt_tokens >= self.compactor.context_tokens * _CONTEXT_USAGE_LIMIT
 
     def _messages_with_active_user_message(self, stored_message, active_message):
         messages = list(self.conversation.messages)
@@ -263,21 +273,11 @@ class Runner:
         old_messages, recent = self.compactor.split(prior)
         if not old_messages:
             return
+        await self._replace_with_compacted_history(old_messages, recent + current_turn)
 
-        await self._replace_with_compacted_history(
-            old_messages,
-            recent + current_turn,
-            still_too_large=self._context_nearly_full,
-        )
-
-    async def _replace_with_compacted_history(self, old_messages, tail_messages, still_too_large):
+    async def _replace_with_compacted_history(self, old_messages, tail_messages):
         tail_messages = list(tail_messages)
         compacted_old = self.compactor.compact_messages(old_messages, store=self.truncation_store)
-        candidate = compacted_old + tail_messages
-        if not still_too_large(candidate):
-            self._replace_history(candidate)
-            return
-
         store_id = self._save_transcript(old_messages)
         summary = await self.summarize(compacted_old)
         self._replace_history([
@@ -297,12 +297,3 @@ class Runner:
         self.history.write(self.conversation.messages)
         self._logged_count = len(self.conversation.messages)
         self._last_prompt_tokens = None
-
-    def _context_nearly_full(self, messages):
-        if self.compactor is None:
-            return False
-        tokens = self.compactor.estimate_tokens(messages)
-        return tokens >= self.compactor.context_tokens * _CONTEXT_USAGE_LIMIT
-
-    def run_tool(self, tool_call):
-        return self.tool_runner.run(tool_call)

@@ -19,6 +19,7 @@ class Config:
         "context": {
             "tokens": 8000,
             "outputTokens": 2000,
+            "maxInputChars": 20000,
             "compactAt": 0.5,
             "keepRecent": 10,
             "maxToolRounds": 20,

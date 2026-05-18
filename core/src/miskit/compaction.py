@@ -1,5 +1,3 @@
-import json
-
 from miskit.message import Message
 from miskit.message import format_message
 
@@ -20,41 +18,10 @@ class Compactor:
             keep_recent=config.get("keepRecent", 10),
         )
 
-    def should_compact(self, messages, prompt_tokens=None):
-        if len(messages) <= self.keep_recent:
+    def should_compact(self, prompt_tokens, message_count):
+        if message_count <= self.keep_recent:
             return False
-
-        if prompt_tokens is None:
-            prompt_tokens = self.estimate_tokens(messages)
-
         return prompt_tokens >= self.context_tokens * self.compact_at
-
-    def estimate_tokens(self, messages):
-        total = 0
-        for message in messages:
-            total += self.estimate_text(message.role)
-            total += self.estimate_text(message.content)
-            if message.name:
-                total += self.estimate_text(message.name)
-            for tool_call in message.tool_calls:
-                total += self.estimate_text(tool_call.name)
-                total += self.estimate_text(json.dumps(tool_call.arguments))
-        return total
-
-    def estimate_text(self, text):
-        if isinstance(text, list):
-            total = 0
-            for part in text:
-                if part.get("type") == "text":
-                    total += max(1, len(part.get("text", "")) // 3)
-                elif part.get("type") == "image":
-                    total += 2500
-            return max(1, total)
-
-        if not isinstance(text, str):
-            text = str(text)
-
-        return max(1, len(text) * 2 // 5)
 
     def split(self, messages):
         messages = list(messages)
@@ -65,18 +32,15 @@ class Compactor:
         if ideal == 0:
             return [], messages
 
-        # Walk backward from ideal to avoid splitting mid-tool-chain.
         start = ideal
         while start > 0 and not self._safe_start(messages[start]):
             start -= 1
 
-        # Backward walk reached 0 — try walking forward from ideal instead.
         if start == 0 and not self._safe_start(messages[0]):
             start = ideal
             while start < len(messages) and not self._safe_start(messages[start]):
                 start += 1
 
-        # Both walks failed (entire conversation is one tool chain) — force split.
         if start >= len(messages):
             start = ideal
 
@@ -124,7 +88,6 @@ class Compactor:
                 current = []
                 current_chars = 0
             current.append(message)
-            # Cap per-message accounting so one huge message doesn't block the next split.
             current_chars += min(len(text), max_chars)
         if current:
             chunks.append(current)
@@ -162,4 +125,3 @@ class Compactor:
                 f" -- use read_more(id=\"{store_id}\") to retrieve the original messages]"
             )
         return Message("system", content)
-

@@ -63,6 +63,7 @@ class Runner:
             max_output_chars=max_tool_output_chars,
         )
         self._last_prompt_tokens = None
+        self._last_prompt_tokens_at = 0
         self._dream_requested = False
         self._dream_task = None
 
@@ -97,7 +98,7 @@ class Runner:
             except Exception:
                 self.rollback_conversation(snapshot)
                 raise
-            self._last_prompt_tokens = message.usage.get("prompt_tokens")
+            self._update_prompt_tokens(message.usage.get("prompt_tokens"))
             self.conversation.add(message)
             self.log_conversation()
             if archived:
@@ -122,8 +123,7 @@ class Runner:
         for _ in range(self.max_tool_rounds):
             message = await self.complete(messages)
             prompt_tokens = message.usage.get("prompt_tokens")
-            if isinstance(prompt_tokens, int) and prompt_tokens > 0:
-                self._last_prompt_tokens = prompt_tokens
+            self._update_prompt_tokens(prompt_tokens)
 
             if message.role != "assistant":
                 raise ValueError("model must return an assistant message")
@@ -254,11 +254,17 @@ class Runner:
             return False
         return len(message.text) > self.max_input_chars
 
+    def _update_prompt_tokens(self, prompt_tokens):
+        if isinstance(prompt_tokens, int) and prompt_tokens > 0:
+            self._last_prompt_tokens = prompt_tokens
+            self._last_prompt_tokens_at = len(self.conversation.messages)
+
     def _prompt_tokens(self, prompt_tokens=None):
         if isinstance(prompt_tokens, int) and prompt_tokens > 0:
             return prompt_tokens
         if isinstance(self._last_prompt_tokens, int) and self._last_prompt_tokens > 0:
-            return self._last_prompt_tokens
+            new_messages = self.conversation.messages[self._last_prompt_tokens_at:]
+            return self._last_prompt_tokens + estimate_messages_tokens(new_messages)
         return estimate_messages_tokens(self.conversation.messages)
 
     def _context_nearly_full(self, prompt_tokens):
@@ -307,3 +313,4 @@ class Runner:
         self.history.write(self.conversation.messages)
         self._logged_count = len(self.conversation.messages)
         self._last_prompt_tokens = None
+        self._last_prompt_tokens_at = 0

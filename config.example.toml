@@ -1,0 +1,86 @@
+# Every setting of a user's agent, with its default. Each user's agent has its own config.toml,
+# in that user's home folder: ~/.arti/homes/<user>/.arti/config.toml on the machine, which is
+# /home/arti/.arti/config.toml inside their sandbox. `python -m host user add` writes a first
+# one (the user's name and time zone). Copy what you need from here.
+#
+# Every key is optional except agent.provider while more than one provider is loaded (the stock
+# plugins load four). An unknown key, a wrong type or a bad value stops the agent at startup with
+# a message naming the key. The host's own settings are in host.toml (see host.example.toml).
+#
+# Secrets never go here: put them in the same folder's .env as KEY=value lines (for example
+# ANTHROPIC_API_KEY=...). Every .env value is a secret: the safety plugin redacts it from logs,
+# history and messages and keeps it out of child processes. Values shorter than 8 characters are
+# not redacted.
+
+# --- the core ---------------------------------------------------------------------------------
+
+[agent]
+provider = "claude-subscription"     # a provider plugin's name: claude-subscription | anthropic |
+                                     # openai | openai-codex ("" = the only one loaded)
+model = ""                           # "" = the provider's default (see README)
+effort = "high"                      # low | medium | high | xhigh | max
+timezone = "America/Los_Angeles"     # for dates, message times and schedules
+user_name = "the user"               # the user's first name, as Arti calls them
+name = "Arti"                        # Arti's name, as it calls itself
+context_window = 0                   # tokens before compaction; 0 = the model's, at most 200K
+request_timeout = 900                # seconds for one model request
+tool_timeout = 3600                  # longest any tool call may run, in seconds
+max_iterations = 100                 # model replies in one turn
+hang_timeout = 300                   # seconds without progress before the agent restarts itself
+                                     # (0 = off); its sandbox starts it again
+
+[storage]
+cache_max_age_days = 7               # cache/ and media/ files older than this are deleted
+
+[plugins]
+disabled = []                        # plugin names to skip, e.g. ["browser"]; a disabled plugin's
+                                     # section below is ignored, and so is every plugin that
+                                     # requires it (without "safety": unguarded)
+
+# Optional, per provider: [providers.<name>]. Each provider's plugin declares its keys
+# (plugins/anthropic/, plugins/openai/, plugins/claude/ for claude-subscription):
+#   anthropic, openai     api_key_env, base_url (https, or http on loopback), timeout,
+#                         max_output_tokens
+#   openai-codex          base_url, timeout (it signs in with `python -m arti login`)
+#   claude-subscription   bin ("" = ~/.local/bin/claude, then PATH; the sandbox image has it on
+#                         PATH), timeout, max_output_tokens
+# timeout 0 = agent.request_timeout; max_output_tokens 0 = the provider's default.
+# [providers.anthropic]
+# api_key_env = "ANTHROPIC_API_KEY"  # the .env variable holding the key
+# [providers.claude-subscription]
+# bin = ""
+
+# --- plugin sections (each declared by its plugin) --------------------------------------------
+
+[approvals]                          # plugins/safety/ (how tool calls are reviewed)
+mode = "smart"                       # smart: a judge model decides routine actions and asks you
+                                     # when unsure; manual: you decide; off: only what is always
+                                     # yours (secrets, Arti itself, sudo, ...). The floor always
+                                     # applies.
+unattended = "deny"                  # chat-less runs (scheduled jobs, ...): deny | smart (judge)
+timeout = 300                        # seconds to wait for /approve before denying
+provider = ""                        # the judge's provider; "" = the agent's
+model = ""                           # the judge's model; "" = that provider's judge model
+policy = ""                          # extra instructions for the judge (trusted)
+allow = []                           # categories always allowed, e.g. ["shell:git"]
+deny = []                            # extra regular expressions blocked in every mode
+
+[network]                            # plugins/safety/
+allow_private_urls = false           # let the user's own conversations' tools reach local addresses
+
+[browser]                            # plugins/browser/
+executable = ""                      # "" = Chromium or Google Chrome on PATH (the sandbox image has
+                                     # none yet, so the browser tool is hidden there)
+
+[image]                              # plugins/image/ (needs the ChatGPT login)
+model = "gpt-image-2-medium"         # gpt-image-2-low | -medium | -high
+
+[cron]                               # plugins/cron/
+enabled = true                       # false stops the scheduler and hides the tool
+
+[memory]                             # plugins/memory.py
+user_chars = 1375                    # size limits of USER.md and MEMORY.md
+notes_chars = 2200
+
+[review]                             # plugins/review.py
+enabled = true                       # after a chat goes quiet, look back and save memories/skills

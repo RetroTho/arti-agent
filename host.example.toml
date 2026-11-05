@@ -1,0 +1,20 @@
+# Every host setting, with its default. Copy what you need to ~/.arti/host.toml (or
+# $ARTI_HOME/host.toml); every key is optional. An unknown key, a wrong type or a bad value stops
+# the host at startup with a message naming the key.
+#
+# These are the host's settings only: the host runs on the machine and owns the chat platform,
+# the users and their sandboxes. Each user's agent has its own settings, in their home folder
+# (homes/<user>/.arti/config.toml; see config.example.toml), which the host never reads.
+#
+# Secrets never go here: a channel's credentials go in ~/.arti/.env as KEY=value lines.
+
+[host]
+channel = ""                         # the chat platform, a package in channels/;
+                                     # "" = the only one there (none is included yet)
+memory = "2g"                        # each sandbox's memory limit (Podman's --memory)
+cpus = 2.0                           # each sandbox's CPU limit (Podman's --cpus)
+hang_timeout = 300                   # seconds without progress before the host restarts itself
+                                     # (its service starts it again)
+
+# A channel's own settings go in a section named after it, [<channel>]; only the chosen
+# channel's section is allowed.

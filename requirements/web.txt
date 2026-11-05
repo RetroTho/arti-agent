@@ -1,0 +1,6 @@
+# Direct dependencies of the web plugin's parser child (plugins/web/child.py) only; never
+# install them into Arti itself. requirements/web.lock.txt pins the full tested set, which the
+# sandbox image installs into /opt/arti/.venv-web (sandbox/Containerfile).
+trafilatura==2.3.1
+pypdf==6.20.0
+lxml==6.1.3

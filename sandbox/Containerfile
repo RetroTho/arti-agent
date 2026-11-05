@@ -1,0 +1,28 @@
+# The sandbox every user's agent runs in (host/sandbox.py runs it with Podman).
+# Built by `python -m host build` from the repository root. It holds only the system and the
+# child environments: Arti's code (arti/, plugins/) is mounted read only at /opt/arti, and the
+# user's home folder at /home/arti.
+FROM docker.io/library/python:3.11-slim-trixie
+
+# ImageMagick converts images a model can't take as they are; git, curl and procps (ps, kill)
+# for the agent's own work; tzdata for the owner's time zone.
+RUN apt-get update \
+ && apt-get install --yes --no-install-recommends \
+    ca-certificates curl git imagemagick procps tzdata \
+ && rm -rf /var/lib/apt/lists/*
+
+# The web plugin's page and PDF parser runs in its own environment (plugins/web/child.py).
+COPY requirements/web.lock.txt /tmp/web.lock.txt
+RUN python -m venv /opt/arti/.venv-web \
+ && /opt/arti/.venv-web/bin/python -m pip install --no-cache-dir --require-hashes --no-deps \
+    -r /tmp/web.lock.txt \
+ && rm /tmp/web.lock.txt
+
+# The official Claude Code CLI, for the claude-subscription provider (each user signs it in
+# from their sandbox: `python -m host user exec ID claude`). Updates come with a new image.
+RUN curl -fsSL https://claude.ai/install.sh | bash \
+ && install -m 0755 "$(readlink -f /root/.local/bin/claude)" /usr/local/bin/claude \
+ && rm -rf /root/.local /root/.claude /root/.claude.json
+ENV DISABLE_AUTOUPDATER=1
+
+WORKDIR /opt/arti
